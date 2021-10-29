@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html>
+
+    <head>
+
+        <meta charset="utf-8">
+        <title>Temporal Summation Demo</title>
+        <link href="temporalSummationStyles.css" type="text/css" rel="stylesheet">
+
+    </head>
+
+    <body>
+        <h1 class="title">Temporal Summation Demo</h1>
+        <p class="paragraph"> The graph below shows the voltage and current of a segment of neural membrane.
+                                  Inject current into the neuron using the "Inject" button. You can show the
+                                  different currents accross the membrane by toggling the current associated
+                                  button. The simulation can be paused and played using the "Pause/Play" button.
+        </p>
+        <div id="interactive">
+            <canvas id="graphAnimation" width="700" height="600"></canvas>
+            <div id="controllers">
+                <button id="injectIButton" onmousedown="injectCurrent()" onmouseup="withdrawCurrent()">Inject</button>
+                <button id="pauseButton" onclick="pause()">Pause</button>
+                <button id="showIInjectButton" onclick="toggleCurrentInject()">I<sub>Inject</sub></button>
+                <button id="showINaButton" onclick="toggleCurrentNa()">I<sub>Na+</sub></button>
+                <button id="showIKButton" onclick="toggleCurrentK()">I<sub>K+<sub></button>
+            </div>
+            </div>
+
+        <script>
+
+            // Membrane is an object that contains all relevant variables
+            // needed to implement the Hodgkin-Huxley model (including ion
+            // concentrations, permeabilities, currents, voltages, etc.). The
+            // initial voltage V is set when the Membrane is instantiated.
+            MembraneUnit = function(V) {
+
+                //  ********************
+                //  ** Variables:
+
+                this.C = 1.5;     // Capacitance of the membrane
+                this.dt = 0.01;   // Change in time (seconds)
+
+                // Conductance per unit area:
+                this.gNa = 120;   // Sodium
+                this.gK = 36;     // Potassium
+                this.gL = 0.3;    // Leak
+
+                // Equilibrium potentials:
+                this.eNa = 120;   // Sodium
+                this.eK = -12;    // Potassium
+                this.eL = -10.6;  // Leak
+                this.Vrest = -55; // Resting membrane potential
+                this.V = V;       // Voltage accross membrane
+
+                // Channel activations:
+                this.n = 0.32;    // Potassium
+                this.m = 0.05;    // Sodium
+                this.h = 0.60;    // Sodium (inactivation)
+
+                // Channel currents:
+                this.IK = 0;      // Potassium
+                this.INa = 0;     // Sodium
+                this.Im = 0;      // Other ions
+                this.injectI = 0; // Current injection
+
+                // ************************
+                // ** Boltzmann equations:
+
+                function alphaN(V) {
+                    return (10 - V) / (100*(Math.exp((10-V) / 10) - 1));
+                };
+                function betaN(V) {
+                    return 0.125 * Math.exp(-V / 80);
+                };
+                function alphaM(V) {
+                    return (25 - V) / (10 * (Math.exp((25 - V) / 10) - 1));
+                };
+                function betaM(V) {
+                    return 4 * Math.exp(-V / 18);
+                };
+                function alphaH(V) {
+                    return 0.07 * Math.exp(-V / 20);
+                };
+                function betaH(V) {
+                    return 1 / (Math.exp((30 - V) / 10) + 1);
+                };
+
+                // step() is the function that determines the membrane
+                // potential of the neuron after some small change in
+                // time (dt).
+                this.step = function() {
+                    // first, calculate the Boltzmann equations given the
+                    // current voltage...
+                    var aN = alphaN(this.V);
+                    var bN = betaN(this.V);
+                    var aM = alphaM(this.V);
+                    var bM = betaM(this.V);
+                    var aH = alphaH(this.V);
+                    var bH = betaH(this.V);
+
+                    // Intermediate steps prior to calculating new values
+                    var tauN = 1 / (aN + bN);
+                    var tauM = 1 / (aM + bM);
+                    var tauH = 1 / (aH + bH);
+                    var nInfinity = aN * tauN;
+                    var mInfinity = aM * tauM;
+                    var hInfinity = aH * tauH;
+
+                    // Apply change in channel activation
+                    this.n += this.dt / tauN * (nInfinity - this.n);
+                    this.m += this.dt / tauM * (mInfinity - this.m);
+                    this.h += this.dt / tauH * (hInfinity - this.h);
+
+                    // Apply change in currents
+                    this.INa = this.gNa * this.m * this.m * this.m * this.h * (this.eNa - this.V);
+                    this.IK = this.gK * this.n * this.n * this.n * this.n * (this.eK - this.V);
+                    this.Im = this.gL * (this.Vrest - this.V);
+
+                    // Apply change in membrane potential
+                    this.V += (this.dt / this.C) * (this.INa + this.IK + this.Im + this.injectI);
+                    // end step()
+                }
+                // end Membrane()...
+            }
+
+            // Preparing the lists that will be a visual representation
+            // of the voltage and currents...
+
+            var currentPlot = [];
+            var voltagePlot = [];
+            var currentPlotNA = [];
+            var currentPlotK = [];
+
+            var plotLength = 600; // length of each plot
+
+            // initialize current and voltage values values for plots
+            for (i = 0; i < plotLength; i++) {
+                currentPlot.push(0);
+                voltagePlot.push(-65);
+                currentPlotNA.push(0);
+                currentPlotK.push(0);
+            }
+
+            // initialize the membrane unit...
+            var membrane = new MembraneUnit(-45);
+            var currentAxis = 295;
+
+
+            // Functions for injecting and withdrawing currents:
+
+            function injectCurrent() {
+                membrane.injectI = 60;
+            }
+
+            function withdrawCurrent() {
+                membrane.injectI = 0;
+            }
+
+            // Set up the canvas and context...
+            var canvas = document.getElementById('graphAnimation');
+            var ctx = canvas.getContext('2d');
+            var graphAxis = new Image();
+            graphAxis.src = 'graphAxisAnimation.png';
+
+            // drawGraph() is the function that will draw the current and
+            // voltage plots, as well as the axis for the graph displaying
+            // the plots. It is
+            function drawGraph() {
+                // set up for next draw...
+                ctx.save();
+                ctx.clearRect(0,0,canvas.width, canvas.height);
+                ctx.drawImage(graphAxis, 0, 0);
+                ctx.translate(62,535); // set the lower right corner of the
+                                       // graph to be x=0, y=0
+                ctx.scale(1,-1);       // then flip the image so that it
+                                       // appears upright...
+
+                // check if the simulation is paused...
+                if (pauseFlag == false) {
+                    // graph is not paused, step forward dt in the simulation
+                    timeStep();
+                } else {
+                    // graph is paused... if the mouse is over the actual
+                    // graph area, draw the vertical hoverline...
+                    if (hoverLine > 0 && hoverLine < 600) {
+                      ctx.lineWidth = 2;
+                      ctx.strokeStyle = 'lightgray';
+                      ctx.beginPath();
+                      ctx.moveTo(hoverLine, 2);
+                      ctx.lineTo(hoverLine, 500);
+                      ctx.stroke();
+                    }
+                }
+                // draw the dashed line that marks current = 0
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'lightgray';
+                ctx.setLineDash([5,5])
+                ctx.beginPath();
+                ctx.moveTo(0, currentAxis + 100);
+                ctx.lineTo(599, currentAxis + 100);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // draw the divider line between voltage and current
+                ctx.strokeStyle = 'black';
+                ctx.beginPath();
+                ctx.moveTo(0, currentAxis);
+                ctx.lineTo(599, currentAxis);
+                ctx.stroke();
+
+                // voltage plot styling:
+                ctx.strokeStyle = 'crimson';
+                ctx.fillStyle = 'crimson';
+
+                // loop through all elements of the voltage plot, drawing
+                // as we go...
+                for (i = 0; i < plotLength - 1; i++) {
+                  ctx.beginPath();
+                  ctx.moveTo(i, voltagePlot[i] + 100);
+                  ctx.lineTo(i + 1, voltagePlot[i + 1] + 100);
+                  ctx.stroke();
+                }
+
+                if (injectFlag) {
+                    // injectFlag is set, injection current should be visible
+                    // current styling:
+                    ctx.strokeStyle = 'purple';
+                    ctx.fillStyle = 'purple';
+
+                    // loop through all elments of the current plot, drawing
+                    // as we go...
+                    for (i = 0; i < plotLength - 1; i++) {
+                      ctx.beginPath();
+                      ctx.moveTo(i, currentPlot[i] + 100 + currentAxis);
+                      ctx.lineTo(i + 1, currentPlot[i + 1] + 100 + currentAxis);
+                      ctx.stroke();
+                    }
+                }
+
+                if (naFlag) {
+                    // injectFlag is set, current should be visible
+                    // current styling:
+                    ctx.strokeStyle = 'royalblue';
+                    ctx.fillStyle = 'royalblue';
+
+                    // loop through all elments of the current plot, drawing
+                    // as we go...
+                    for (i = 0; i < plotLength - 1; i++) {
+                      ctx.beginPath();
+                      ctx.moveTo(i, currentPlotNA[i] + 103 + currentAxis);
+                      ctx.lineTo(i + 1, currentPlotNA[i + 1] + 103 + currentAxis);
+                      ctx.stroke();
+                    }
+                }
+                if (kFlag) {
+                    // injectFlag is set, current should be visible
+                    // current styling:
+                    ctx.strokeStyle = 'green';
+                    ctx.fillStyle = 'green';
+
+                    // loop through all elments of the current plot, drawing
+                    // as we go...
+                    for (i = 0; i < plotLength - 1; i++) {
+                      ctx.beginPath();
+                      ctx.moveTo(i, currentPlotK[i] + 97 + currentAxis);
+                      ctx.lineTo(i + 1, currentPlotK[i + 1] + 97 + currentAxis);
+                      ctx.stroke();
+                    }
+                }
+                // restore the canvas context prior to next drawing...
+                ctx.restore();
+
+                // end drawGraph()...
+            }
+
+            setInterval(drawGraph, 15);
+            var timeStepWidth = 8; // number of steps to take per interval
+
+            // timeStep() is a function that will move the simulation forward
+            // multiple small time segments based on timeStepWidth. Reducing
+            // timeStepWidth with make the simulation appear slower.
+            function timeStep() {
+                // perform the steps on the membrane...
+                for (i = 0; i < timeStepWidth; i++) {
+                    membrane.step();
+                }
+
+                // once final step is reached, push the membrane units
+                // voltage and current values onto the associated plots
+                // and remove the oldest values. NOTE: values are scaled
+                // below...
+                voltagePlot.shift();
+                voltagePlot.push(membrane.V * 1.5);
+                currentPlot.shift();
+                currentPlot.push(membrane.injectI * 1.5);
+                currentPlotNA.shift();
+                currentPlotNA.push(membrane.INa / 12);
+                currentPlotK.shift();
+                currentPlotK.push(membrane.IK / 12);
+            }
+
+            // Button and controller functions:
+
+            // Flags:
+            var pauseFlag = false;
+            var injectFlag = true;
+            var naFlag = false;
+            var kFlag = false;
+
+            // The pause() function will either pause the simulation, or
+            // restart the simulation based on the current status of the
+            // pauseFlag...
+            function pause() {
+                if (pauseFlag == true) {
+                    // play the simulation
+                    pauseFlag = false;
+                    document.getElementById('pauseButton').innerHTML = 'Pause';
+                } else {
+                    // pause the simulation
+                    pauseFlag = true;
+                    document.getElementById('pauseButton').innerHTML = 'Play';
+                }
+            }
+
+            // the toggleCurrentInject() function will toggle the visibility
+            // of the injection current on the graph...
+            function toggleCurrentInject() {
+              if (injectFlag) {
+                // make injection current invisible
+                injectFlag = false;
+                document.getElementById('showIInjectButton').style.color = "rebeccapurple";
+                document.getElementById('showIInjectButton').style.backgroundColor = "white";
+              } else {
+                // make injection current visible
+                injectFlag = true;
+                document.getElementById('showIInjectButton').style.color = "white";
+                document.getElementById('showIInjectButton').style.backgroundColor = "rebeccapurple";
+              }
+            }
+
+            // the toggleCurrentK() function will toggle the visibility of the
+            // Potassium (K) current on the graph...
+            function toggleCurrentK() {
+                if (kFlag == true) {
+                  // make K current invisible
+                  kFlag = false;
+                  document.getElementById('showIKButton').style.color = "green";
+                  document.getElementById('showIKButton').style.backgroundColor = "white";
+                } else {
+                  // make K current visible
+                  kFlag = true;
+                  document.getElementById('showIKButton').style.color = "white";
+                  document.getElementById('showIKButton').style.backgroundColor = "green";
+                }
+            }
+
+            // the toggleCurrentNa() function will toggle the visibility of the
+            // Sodium (Na) current on the graph...
+            function toggleCurrentNa() {
+                if (naFlag == true) {
+                  // make Na current invisible...
+                  naFlag = false;
+                  document.getElementById('showINaButton').style.color = "royalblue";
+                  document.getElementById('showINaButton').style.backgroundColor = "white";
+                } else {
+                  // make Na current visible...
+                  naFlag = true;
+                  document.getElementById('showINaButton').style.color = "white";
+                  document.getElementById('showINaButton').style.backgroundColor = "royalblue";
+                }
+            }
+
+            // Hoverline control:
+            canvas.addEventListener('mousemove', function(evt) {
+                hoverLine = getMousePos(canvas, evt).x - 61;
+            }, false);
+
+            // getMousePos() is a function that determines the location
+            // of the cursor when over the canvas element...
+            function getMousePos(canvas, evt) {
+                var rect = canvas.getBoundingClientRect();
+                return {
+                    x: evt.clientX - rect.left,
+                    y: evt.clientY - rect.top
+                };
+            }
+
+        </script>
+
+    </body>
+
+
+</html>

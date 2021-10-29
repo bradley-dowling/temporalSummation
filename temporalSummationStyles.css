@@ -1,0 +1,89 @@
+button {
+    position: absolute;
+    background-color: white;
+    border: 2px solid;
+    transition-duration: 0.4s;
+    -webkit-transition-duration: 0.4s;
+    border-radius: 4px;
+    width: 100px;
+    height: 64px;
+    font-size: 22px;
+}
+
+button:hover {
+    cursor: pointer;
+}
+
+button:focus {
+    outline: none;
+}
+
+#injectIButton {
+    color: rebeccapurple;
+    border-color: rebeccapurple;
+    top: 390px;
+    left: 710px;
+}
+
+#injectIButton:active {
+    background-color: rebeccapurple;
+    color: white;
+}
+
+#pauseButton {
+    color: crimson;
+    border-color: crimson;
+    top: 460px;
+    left: 710px;
+}
+
+#pauseButton:active {
+    background-color: crimson;
+    color: white;
+}
+
+#showIInjectButton {
+  color: white;
+  background-color: rebeccapurple;
+  border-color: rebeccapurple;
+  top: 20px;
+  left: 710px;
+}
+
+#showINaButton {
+  color: royalblue;
+  border-color: royalblue;
+	top: 90px;
+	left: 710px;
+}
+
+#showIKButton {
+  color: green;
+  border-color: green;
+	top: 160px;
+	left: 710px;
+}
+
+.title {
+    font-family: sans-serif;
+    font-weight: 700;
+    margin: 1rem 0;
+    letter-spacing: 2px;
+    text-align: left;
+    padding-left: 20px;
+    padding-top: 20px;
+    width: 800px;
+}
+
+.paragraph {
+    font-family: sans-serif;
+    line-height: 1.6em;
+    text-align: left;
+    padding-left: 20px;
+    font-size: 16px;
+    width: 800px;
+}
+
+#interactive {
+    position: relative;
+}
