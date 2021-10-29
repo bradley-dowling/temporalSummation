@@ -372,6 +372,8 @@
             }
 
             // Hoverline control:
+            var hoverLine = 0;
+            
             canvas.addEventListener('mousemove', function(evt) {
                 hoverLine = getMousePos(canvas, evt).x - 61;
             }, false);
